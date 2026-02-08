@@ -2604,15 +2604,6 @@ Use your platform's built-in UI (Phoenix or Langfuse both have dashboards), or b
 - **rank_bm25** - BM25 retrieval for RAG systems
 - **litellm** - Unified LLM API interface
 
-### Learning Resources
-
-- **Maven Course:** [maven.com/parlance-labs/evals](https://maven.com/parlance-labs/evals)
-- **HuggingFace Eval Guidebook:** [github.com/huggingface/evaluation-guidebook](https://github.com/huggingface/evaluation-guidebook)
-- **Hamel's Blog:** [hamel.dev](https://hamel.dev/)
-- **Shreya's Blog:** [sh-reya.com](https://www.sh-reya.com/)
-- **Phoenix Docs:** [docs.arize.com/phoenix](https://docs.arize.com/phoenix)
-- **Langfuse Docs:** [langfuse.com/docs](https://langfuse.com/docs)
-
 ### Key Principles (Revisited)
 
 1. **Start simple** - Don't over-engineer
@@ -3317,35 +3308,71 @@ Start today. Your future self will thank you.
 
 ---
 
-## Additional Resources
+## Learning Resources
 
-### Maven Course
-- **Full course**: [maven.com/parlance-labs/evals](https://maven.com/parlance-labs/evals)
-- **Free resources**: FAQ, flashcards, recordings on course page
+### Platform Documentation & Learning Hubs
 
-### GitHub Repositories
-- **Phoenix**: [github.com/Arize-ai/phoenix](https://github.com/Arize-ai/phoenix)
-- **Langfuse**: [github.com/langfuse/langfuse](https://github.com/langfuse/langfuse)
-- **HuggingFace guidebook**: [github.com/huggingface/evaluation-guidebook](https://github.com/huggingface/evaluation-guidebook)
-- **judgy library**: [github.com/ai-evals-course/judgy](https://github.com/ai-evals-course/judgy)
-
-### Platform Documentation
 - **Phoenix Docs**: [docs.arize.com/phoenix](https://docs.arize.com/phoenix)
+- **Arize Blog & Learning Hub**: [arize.com/blog](https://arize.com/blog/)
 - **Langfuse Docs**: [langfuse.com/docs](https://langfuse.com/docs)
-- **LangSmith Docs**: [docs.smith.langchain.com](https://docs.smith.langchain.com)
-- **Braintrust Docs**: [braintrust.dev/docs](https://www.braintrust.dev/docs)
+- **Maven Course (AI Evals for Engineers & PMs)**: [maven.com/parlance-labs/evals](https://maven.com/parlance-labs/evals)
+- **HuggingFace Evaluation Guidebook**: [github.com/huggingface/evaluation-guidebook](https://github.com/huggingface/evaluation-guidebook)
 
-### Articles Referenced
-- Aakash Gupta's detailed guide: [news.aakashg.com/p/hamel-shreya-podcast-2](https://www.news.aakashg.com/p/hamel-shreya-podcast-2)
-- Arize recipe bot walkthrough: [arize.com/blog/ai-evals-maven-course-homework-the-recipe-bot-workflow/](https://arize.com/blog/ai-evals-maven-course-homework-the-recipe-bot-workflow/)
-- Eugene Yan on eval process: [eugeneyan.com/writing/eval-process/](https://eugeneyan.com/writing/eval-process/)
+### Research & Thought Leadership
 
-### Contact Instructors
-- Hamel Husain: [@HamelHusain](https://twitter.com/HamelHusain)
-- Shreya Shankar: [@sh_reya](https://twitter.com/sh_reya)
+- **OpenAI Evals Platform**: [evals.openai.com](https://evals.openai.com/)
+- **OpenAI Cookbook** (practical examples & guides): [cookbook.openai.com](https://cookbook.openai.com/)
+- **OpenAI Research**: [openai.com/research](https://openai.com/research)
+- **OpenAI Docs (Evals)**: [platform.openai.com/docs/guides/evals](https://platform.openai.com/docs/guides/evals)
+- **Anthropic Research**: [anthropic.com/research](https://www.anthropic.com/research)
+- **METR** (Model Evaluation & Threat Research): [metr.org](https://metr.org/)
+- **Eugene Yan on eval process**: [eugeneyan.com/writing/eval-process](https://eugeneyan.com/writing/eval-process/)
+
+### Blogs That Shaped This Guide
+
+- **Hamel Husain's Blog**: [hamel.dev](https://hamel.dev/) — Applied AI engineering, LLM evals deep-dives
+- **Shreya Shankar's Site**: [sh-reya.com](https://www.sh-reya.com/) — LLM data systems research, eval methodology
+- **Maxim AI Articles**: [getmaxim.ai/articles](https://www.getmaxim.ai/articles) — Agentic evaluation patterns
+
+### Open-Source Tools & Libraries
+
+| Tool | Focus | License | Links |
+|------|-------|---------|-------|
+| **Arize Phoenix** | Observability & evals | ELv2 | [GitHub](https://github.com/Arize-ai/phoenix) · [Docs](https://docs.arize.com/phoenix) |
+| **Langfuse** | Custom pipelines & tracing | MIT | [GitHub](https://github.com/langfuse/langfuse) · [Docs](https://langfuse.com/docs) |
+| **RAGAS** | RAG-specific evaluation | Apache 2.0 | [GitHub](https://github.com/explodinggradients/ragas) · [Docs](https://docs.ragas.io/) |
+| **Comet Opik** | LLM tracing & evaluation | Apache 2.0 | [GitHub](https://github.com/comet-ml/opik) · [Site](https://www.comet.com/site/products/opik/) |
+| **judgy** | Statistical bias correction | Open | [GitHub](https://github.com/ai-evals-course/judgy) |
+| **Braintrust** | Experimentation & logging | Partial | [Docs](https://www.braintrust.dev/docs) |
+| **Galileo** | Hallucination detection | Proprietary | [Site](https://www.galileo.ai/) |
+| **Maxim** | Agentic system evaluation | Proprietary | [Site](https://www.getmaxim.ai/) |
+
+### Strategy Comparison Matrix
+
+| Company | Focus | Open Source | Best For | Unique Strength |
+|---------|-------|-------------|----------|-----------------|
+| **Anthropic** | Safety / Red Teaming | Partial | Frontier risks | Constitutional classifiers, multi-attempt adversarial testing |
+| **OpenAI** | Preparedness / Business | Evals toolkit | Enterprise context | SME probing, contextual evals |
+| **Arize** | Observability | Phoenix (ELv2) | Production scale | OTel-native, data lake integration |
+| **RAGAS** | RAG-specific | Yes (Apache 2.0) | RAG pipelines | Reference-free metrics, synthetic test data generation |
+| **Maxim** | Agentic Systems | No | Multi-agent apps | Simulation framework, no-code evaluation |
+| **Langfuse** | Custom Pipelines | Yes (MIT) | Data sovereignty | Self-hostable, full control over data |
+| **Braintrust** | Experimentation | Partial | Early-stage teams | Collaborative design, fast iteration |
+| **Galileo** | Hallucinations | No | Quality assurance | ChainPoll, real-time monitoring |
+| **Comet Opik** | LLM Tracing & Evals | Yes (Apache 2.0) | End-to-end observability | Framework integrations, online evaluation rules |
+| **METR** | Catastrophic Risk | Research | Policy guidance | Autonomous capability assessment |
+
+### Contact Me
+- Om Bharatiya: [@ombharatiya](https://twitter.com/ombharatiya)
+
+### Reference Work Credits
+This guide was built on the foundation of the following people's work and ideas. Their courses, blogs, and open-source contributions made this guide possible:
+- Hamel Husain: [@HamelHusain](https://x.com/HamelHusain) — [hamel.dev](https://hamel.dev/)
+- Shreya Shankar: [@sh_reya](https://x.com/sh_reya) — [sh-reya.com](https://www.sh-reya.com/)
+- Eugene Yan: [@eugeneyan](https://x.com/eugeneyan) — [eugeneyan.com](https://eugeneyan.com/)
 
 ---
 
-*This study guide synthesizes content from the AI Evals for Engineers & PMs course by Hamel Husain and Shreya Shankar, enriched with hands-on examples, production-ready code, and platform-specific guides for Phoenix, Langfuse, and more.*
+*This guide was inspired by and builds upon the AI Evals for Engineers & PMs course by Hamel Husain and Shreya Shankar, extended with additional research, production-ready code examples, and multi-platform guides covering Phoenix, Langfuse, and the broader eval tooling ecosystem.*
 
-*Created: February 2026*
+*Author: Om Bharatiya | Created: February 2026*
