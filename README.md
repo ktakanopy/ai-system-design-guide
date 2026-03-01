@@ -31,6 +31,7 @@
 | **Pick the right model (2026)** | [Model Taxonomy](02-model-landscape/01-model-taxonomy.md) → [Pricing](02-model-landscape/03-pricing-and-costs.md) |
 | **Evaluate AI in production** | [AI Evals Guide (Phoenix/Langfuse)](ai_evals_comprehensive_study_guide.md) → [AI Evals Guide (LangWatch/Langfuse)](ai_evals_complete_guide_langwatch_langfuse.md) |
 | **Find the best courses to learn AI** | [Recommended Courses & Learning Paths](COURSES.md) |
+| **Transition from my current role to AI** | [Role Transition Guide](TRANSITION_GUIDE.md) |
 
 ---
 
@@ -72,6 +73,7 @@
 ├── ai_evals_comprehensive_study_guide.md      # 🔬 Deep-dive: AI Evals (Phoenix + Langfuse)
 └── ai_evals_complete_guide_langwatch_langfuse.md  # 🔬 Deep-dive: AI Evals (LangWatch + Langfuse)
 └── COURSES.md                   # 🎓 Recommended courses & learning paths
+└── TRANSITION_GUIDE.md          # 🔄 Transition from Backend/QA/PM/EM to AI roles
 ```
 
 ---
