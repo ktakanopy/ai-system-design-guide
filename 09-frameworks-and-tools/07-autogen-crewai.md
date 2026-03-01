@@ -1,6 +1,6 @@
-# AutoGen and CrewAI (Dec 2025)
+# AutoGen and CrewAI (March 2026)
 
-In late 2025, while LangGraph dominates the "low-level" orchestration layer, **AutoGen** and **CrewAI** have carved out out niches as **High-Level Agentic Frameworks**. They focus on "Collaborative AI" where the main abstraction is the **Role-Playing Agent**.
+In 2025-2026, **AutoGen** and **CrewAI** have both undergone major rewrites. AutoGen 0.4 is a full async-first redesign (AgentChat API), while CrewAI added **Flows** — a state-machine orchestration layer alongside its classic Process model.
 
 ## Table of Contents
 
@@ -20,18 +20,72 @@ CrewAI is built around the concept of a **Process**.
 - **Tasks**: Explicit goals with specific outputs.
 - **Process Orchestration**: Sequential, Hierarchical, or Consensual (Consensus-based).
 
-**2025 Use Case**: CrewAI is the best framework for **Automating White-Collar Workflows** (e.g., generating a full marketing campaign from a single prompt) where the structure of the team is well-understood.
+### CrewAI Flows (2025 Addition)
+
+CrewAI **Flows** add a **state-machine layer** on top of the classic Crew pattern:
+
+```python
+from crewai.flow.flow import Flow, listen, start
+
+class ContentFlow(Flow):
+    @start()
+    def research_topic(self):
+        # Returns research output
+        return research_crew.kickoff({"topic": self.state["topic"]})
+    
+    @listen(research_topic)
+    def write_article(self, research):
+        # Triggered after research completes
+        return writing_crew.kickoff({"research": research})
+    
+    @listen(write_article)
+    def publish(self, article):
+        # Final step
+        return publisher.publish(article)
+```
+
+**2026 Use Cases**: CrewAI + Flows is the best framework for **business process automation** (content pipelines, data analysis workflows) where the structure is well-defined.
 
 ---
 
 ## AutoGen: The Developer Perspective
 
-Microsoft's AutoGen is built for **Dynamic Conversation**.
-- **Conversable Agents**: Every agent is a "Chat participant."
-- **Code Execution**: Integrated support for running code in sandboxes (E2B/Docker).
-- **GroupChat Manager**: A specialized agent that decides *who speaks next*.
+### AutoGen 0.4 (Complete Rewrite)
 
-**2025 Use Case**: AutoGen excels at **Joint Logic Generation** and **Self-Healing Code execution**, where agents need to iterate on a technical problem.
+Microsoft released AutoGen 0.4 in late 2025 — a **complete rewrite** with a new async-first architecture.
+
+```python
+# AutoGen 0.4: AgentChat API
+from autogen_agentchat.agents import AssistantAgent, UserProxyAgent
+from autogen_agentchat.teams import RoundRobinGroupChat
+from autogen_ext.models import OpenAIChatCompletionClient
+
+model_client = OpenAIChatCompletionClient(model="gpt-4o")
+
+coder = AssistantAgent(
+    "Coder",
+    model_client=model_client,
+    system_message="You write Python code."
+)
+reviewer = AssistantAgent(
+    "Reviewer",
+    model_client=model_client,
+    system_message="You review code for bugs and style."
+)
+
+team = RoundRobinGroupChat([coder, reviewer], max_turns=4)
+
+# Async-native
+async def run():
+    result = await team.run(task="Write a binary search function.")
+    print(result.messages[-1].content)
+```
+
+**Key 0.4 changes:**
+- **Event-driven**: Agents communicate via typed events, not raw text messages
+- **Async-first**: Every API is async by default
+- **AgentChat** high-level API vs **Core** low-level API
+- **Magentic-One**: Microsoft's multi-agent system built on AutoGen 0.4 for complex web tasks
 
 ---
 
@@ -45,12 +99,14 @@ In late 2025, both frameworks have adopted **Swarm Patterns**.
 
 ## Framework Comparison Matrix
 
-| Feature | CrewAI | AutoGen | LangGraph |
-|---------|--------|---------|-----------|
-| **Core Abstraction** | Task/Process | Conversation | State/Graph |
-| **Ease of Use** | High (Declarative) | Medium | Low (Imperative) |
-| **Control** | Low | Medium | High |
+| Feature | CrewAI | AutoGen 0.4 | LangGraph |
+|---------|--------|--------------|-----------|
+| **Core Abstraction** | Task/Process/Flow | Event/Team | State/Graph |
+| **Architecture** | Declarative + State Machine | Async Event-Driven | Imperative DAG |
+| **Ease of Use** | High | Medium | Low |
+| **Control** | Low-Medium | Medium | High |
 | **Best For** | Business Automations | Collaborative Logic | Complex Tool-Use |
+| **API Style** | Python classes + YAML | Async Python | Python + JSON state |
 
 ---
 

@@ -1,4 +1,4 @@
-# Framework Selection Guide (Dec 2025)
+# Framework Selection Guide (March 2026)
 
 The landscape of AI frameworks changed drastically in 2025. This guide provides the **Decision Matrix** for choosing your stack based on production requirements, team expertise, and system scale.
 
@@ -13,7 +13,7 @@ The landscape of AI frameworks changed drastically in 2025. This guide provides 
 
 ---
 
-## The 2025 Framework Landscape
+## The 2026 Framework Landscape
 
 | Framework | Tier | Primary Value | Key Weakness |
 |-----------|------|---------------|--------------|
@@ -22,6 +22,9 @@ The landscape of AI frameworks changed drastically in 2025. This guide provides 
 | **LlamaIndex**| L2 (Data) | Advanced Retrieval (RAG) | Logic flexibility |
 | **CrewAI** | L3 (App) | Business process speed | Hides failures |
 | **Semantic Kernel**| L3 (Enterprise)| Microsoft Ecosystem | Python maturity |
+| **Claude Code** | L1 (Coding) | Autonomous CLI coding agent | Requires Anthropic API |
+| **Cursor / Windsurf** | L2 (IDE) | Tight IDE + agent integration | Closed-source infra |
+| **OpenHands** | L2 (Coding) | Open-source autonomous agent | Requires self-hosting |
 
 ---
 
@@ -29,11 +32,14 @@ The landscape of AI frameworks changed drastically in 2025. This guide provides 
 
 **Use this logic to select your stack:**
 
-1. **Is it a pure RAG app?** -> **LlamaIndex**.
-2. **Does it require long-running state/Human-in-the-loop?** -> **LangGraph**.
-3. **Is high reliability (99%+) and cross-model portability critical?** -> **DSPy**.
-4. **Are you a C#/.NET shop?** -> **Semantic Kernel**.
-5. **Are you building high-level automations for business users?** -> **CrewAI**.
+1. **Is it a pure RAG app?** → **LlamaIndex**.
+2. **Does it require long-running state/Human-in-the-loop?** → **LangGraph**.
+3. **Is high reliability (99%+) and cross-model portability critical?** → **DSPy**.
+4. **Are you a C#/.NET shop?** → **Semantic Kernel**.
+5. **Are you building high-level automations for business users?** → **CrewAI + Flows**.
+6. **Are you doing autonomous file-system level coding tasks?** → **Claude Code** (CLI) or **Cline** (VS Code).
+7. **Need open-source coding agent that works with any LLM?** → **OpenHands** (Docker).
+8. **Want the best IDE experience with AI?** → **Cursor** (closed) or **Windsurf** (Codeium).
 
 ---
 
@@ -54,13 +60,17 @@ As a Staff Engineer, you must resist **Framework Bloat**.
 
 ---
 
-## Staff-Level Recommendation (Dec 2025)
+## Staff-Level Recommendation (March 2026)
 
 For a modern, production-grade agentic system:
 - **Orchestration**: LangGraph (for state and loops).
 - **Optimization**: DSPy (to compile prompts for different model tiers).
 - **Retrieval**: LlamaIndex (for multi-stage RAG).
 - **Observability**: LangSmith (for tracing and evaluation).
+- **Autonomous coding**: Claude Code (CLI) or Cline (VS Code) for file-level editing tasks.
+- **Open coding agent**: OpenHands for self-hosted or CI pipeline integration.
+
+**The 2026 insight**: Agentic coding tools (Claude Code, Cursor, OpenHands) are not replacements for orchestration frameworks — they are a **new category** that operates at the file-system level, above the LLM API but below the application logic.
 
 ---
 
