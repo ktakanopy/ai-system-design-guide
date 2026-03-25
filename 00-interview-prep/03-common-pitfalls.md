@@ -527,4 +527,4 @@ passes through a content filter before reaching the user."
 
 ---
 
-*See also: [Question Bank](01-question-bank.md) | [Answer Frameworks](02-answer-frameworks.md) | [Whiteboard Exercises](04-whiteboard-exercises.md)*
+*See also: [Question Bank](01-question-bank.md) | [Answer Frameworks](02-answer-frameworks.md) | [Whiteboard Exercises](04-whiteboard-exercises/README.md)*

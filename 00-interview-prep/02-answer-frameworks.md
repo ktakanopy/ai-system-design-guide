@@ -497,4 +497,4 @@ deeper into any specific component, or should I move on to evaluation?"
 
 ---
 
-*See also: [Question Bank](01-question-bank.md) | [Common Pitfalls](03-common-pitfalls.md) | [Whiteboard Exercises](04-whiteboard-exercises.md)*
+*See also: [Question Bank](01-question-bank.md) | [Common Pitfalls](03-common-pitfalls.md) | [Whiteboard Exercises](04-whiteboard-exercises/README.md)*

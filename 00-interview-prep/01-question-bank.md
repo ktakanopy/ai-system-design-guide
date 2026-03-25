@@ -3665,4 +3665,4 @@ Error analysis is discovery. Automated evals are measurement. Discovery must pre
 
 ---
 
-*See also: [Answer Frameworks](02-answer-frameworks.md) | [Common Pitfalls](03-common-pitfalls.md) | [Whiteboard Exercises](04-whiteboard-exercises.md)*
+*See also: [Answer Frameworks](02-answer-frameworks.md) | [Common Pitfalls](03-common-pitfalls.md) | [Whiteboard Exercises](04-whiteboard-exercises/README.md)*
