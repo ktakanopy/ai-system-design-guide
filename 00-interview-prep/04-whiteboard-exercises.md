@@ -53,38 +53,62 @@ Design a RAG-based knowledge assistant for a large enterprise with the following
 
 #### High-Level Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                          DATA PLANE                                      │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────────────────────┐│
-│  │   Connectors │───▶│   Processor  │───▶│       Vector Database        ││
-│  │ (SP,GD,Conf) │    │ (chunk,embed)│    │  (Pinecone/Qdrant/Weaviate)  ││
-│  └──────────────┘    └──────────────┘    └──────────────────────────────┘│
-│                                                      ▲                   │
-│                                                      │ sync              │
-│  ┌──────────────────────────────────────────────────┼───────────────────┐│
-│  │                    Permission Service            │                   ││
-│  └──────────────────────────────────────────────────┼───────────────────┘│
-└─────────────────────────────────────────────────────┼───────────────────┘
-                                                      │
-┌─────────────────────────────────────────────────────┼───────────────────┐
-│                          QUERY PLANE                │                   │
-│  ┌──────────────┐    ┌──────────────┐    ┌─────────┴──────┐             │
-│  │    User      │───▶│  Query API   │───▶│   Retriever    │             │
-│  │  Interface   │    │              │    │ (+ perm filter)│             │
-│  └──────────────┘    └──────────────┘    └────────┬───────┘             │
-│                             │                      │                     │
-│                             ▼                      ▼                     │
-│                      ┌──────────────┐    ┌──────────────┐               │
-│                      │   Reranker   │◀───│   Chunks     │               │
-│                      └──────┬───────┘    └──────────────┘               │
-│                             │                                            │
-│                             ▼                                            │
-│                      ┌──────────────┐    ┌──────────────┐               │
-│                      │  Generator   │───▶│   Response   │               │
-│                      │    (LLM)     │    │  + Citations │               │
-│                      └──────────────┘    └──────────────┘               │
-└─────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph DATA_PLANE["DATA PLANE"]
+        direction LR
+
+        subgraph CONNECTORS["Connectors"]
+            SP["SharePoint\nGraph API + delta sync"]
+            CONF["Confluence\nREST API + webhooks"]
+            GD["Google Drive\nDrive API + push notifications"]
+        end
+
+        subgraph PROCESSOR["Processor"]
+            CHUNK["Chunking\n· Markdown/HTML → semantic by headers\n· PDFs → layout-aware via Document AI\n· Wiki → section-based\n· 512 tokens, 50 overlap"]
+            EMBED["Embedding Service\n· Cohere embed-v3 (multilingual)\n· Batches of 100 chunks\n· Exponential backoff on rate limit"]
+        end
+
+        PERM_SVC["Permission Service\n· Syncs user/group grants from source\n· Attaches visibility: private|internal|public\n· Triggers on permission change events"]
+
+        VDB[("Vector Database\nPinecone / Qdrant\n50M vectors (10M docs × 5 chunks)\n· Dense + sparse hybrid search\n· Metadata: doc_id, chunk_id,\n  language, permissions, source")]
+
+        SP & CONF & GD -->|"normalized doc schema\n(doc_id, content, permissions, metadata)"| CHUNK
+        CHUNK -->|"chunks with inherited permissions"| EMBED
+        EMBED -->|"vectors + metadata"| VDB
+        PERM_SVC -->|"permission sync"| VDB
+        SP & CONF & GD -->|"permission events"| PERM_SVC
+    end
+
+    subgraph QUERY_PLANE["QUERY PLANE"]
+        direction TD
+
+        USER["User Interface\n(Web / API / Slack)"]
+        QAPI["Query API\n· Auth + rate limiting\n· Conversation history (optional)"]
+        LANGDET["Language Detection\n· Detect: en / es / zh\n· Boosts same-language results"]
+        REDIS[("Redis Cache\n· permissions:{user_id} TTL=5min\n· response cache for repeated queries")]
+        PERM_RES["Permission Resolver\n· Expands group memberships\n· Builds $or filter:\n  public | user grant | group grant"]
+        RETRIEVER["Retriever\n· Hybrid search (dense + sparse)\n· Permission filter applied\n· top_k = 20 candidates"]
+        RERANKER["Reranker\n· Model: bge-reranker-v2-m3\n· Cross-encoder, multilingual\n· top-20 → top-5\n· Latency budget: ~150ms"]
+        GEN["Generator\n· Model: GPT-4o (temp=0.1)\n· Grounded strictly on context\n· Falls back to secondary LLM\n· Adds [1],[2] citations"]
+        RESP["Response\n· Answer + cited sources\n· Source links\n· Degraded warning if partial"]
+        FEEDBACK["User Feedback\n· Thumbs up / down\n· Query reformulation rate\n· Citation click-through"]
+        MONITOR["Monitoring\n· Latency dashboards (p50/p95/p99)\n· Permission filter hit rate\n· Empty result rate by source\n· Cost per query"]
+
+        USER -->|"natural language query"| QAPI
+        QAPI --> LANGDET
+        QAPI -->|"user_id"| PERM_RES
+        PERM_RES <-->|"cache read/write"| REDIS
+        LANGDET & PERM_RES -->|"embedded query + filter"| RETRIEVER
+        RETRIEVER -->|"top-20 chunks"| RERANKER
+        RERANKER -->|"top-5 chunks"| GEN
+        GEN -->|"grounded answer"| RESP
+        RESP --> USER
+        RESP --> FEEDBACK
+        QAPI & GEN & RETRIEVER --> MONITOR
+    end
+
+    VDB -->|"ranked chunks + metadata"| RETRIEVER
 ```
 
 #### Data Pipeline Deep Dive
@@ -328,26 +352,59 @@ Design an AI-powered customer support system for an e-commerce company:
 **Key Architectural Decisions:**
 
 1. **Agent Architecture with Flow Control:**
-```
-┌─────────────────────────────────────────────────────────┐
-│                                                         │
-│   ┌─────────┐     ┌─────────────┐     ┌─────────────┐   │
-│   │ Intake  │────▶│  Classify   │────▶│   Router    │   │
-│   └─────────┘     └─────────────┘     └──────┬──────┘   │
-│                                              │           │
-│         ┌────────────────┬──────────────────┼───────┐   │
-│         ▼                ▼                  ▼       ▼   │
-│   ┌───────────┐   ┌───────────┐   ┌───────────┐ ┌─────┐ │
-│   │Order Flow │   │Product Q&A│   │ Returns   │ │Human│ │
-│   └─────┬─────┘   └─────┬─────┘   └─────┬─────┘ └─────┘ │
-│         │               │               │               │
-│         └───────────────┴───────────────┘               │
-│                         │                               │
-│                   ┌─────▼─────┐                         │
-│                   │  Response │                         │
-│                   │ Generator │                         │
-│                   └───────────┘                         │
-└─────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph EXTERNAL["External Integrations"]
+        ZD_IN["Zendesk Webhook\nNew ticket arrives"]
+        ZD_OUT_CLOSE["Zendesk: Close Ticket\n(resolved by AI)"]
+        ZD_OUT_ESC["Zendesk: Assign to Queue\n(context summary attached)"]
+    end
+
+    subgraph DATASTORES["Data Stores"]
+        ORDERS[("Order History DB\norder_id, status,\nitems, shipment")]
+        PRODUCTS[("Product Catalog\n1M products\ncategory, price, specs")]
+        FAQ[("FAQ / Knowledge Base\ncommon questions\nreturn policies")]
+        CONV_MEM[("Conversation Memory\nmulti-turn history\nper session_id")]
+    end
+
+    subgraph AGENT["AI Agent System"]
+        INTAKE["Intake\n· Language detection (3 langs)\n· Session init / history load\n· PII extraction (email, order_id)"]
+        CLASSIFY["Intent Classifier\n· order_inquiry | product_question\n· return_request | complaint\n· payment_dispute | other"]
+        SENTIMENT["Sentiment Analyzer\n· Detects highly negative tone\n· Flags payment disputes\n· Triggers escalation threshold"]
+        ROUTER["Router\n· Maps intent + sentiment to flow\n· Escalates if confidence < threshold\n  after 2 attempts"]
+
+        subgraph FLOWS["Specialized Flows"]
+            ORDER_FLOW["Order Flow\n· lookup_order(order_id | email)\n· shipment status, ETA\n· order modifications"]
+            PRODUCT_FLOW["Product Q&A\n· search_products(query, category,\n  price_range)\n· Compare products\n· Answer from FAQ"]
+            RETURN_FLOW["Returns Flow\n· Verify eligibility\n· create_return(order_id,\n  reason, items)\n· Confirm policy"]
+            HUMAN_FLOW["Escalate to Human\n· escalate_to_human(reason, priority)\n· Triggers on:\n  - explicit request\n  - negative sentiment\n  - payment dispute\n  - low confidence (2 attempts)\n  - refund above threshold\n  - complex multi-order"]
+        end
+
+        RESPGEN["Response Generator\n· GPT-4o grounded on tool results\n· Multilingual reply\n· Adds order/product links\n· Logs to ticket timeline"]
+        ANALYTICS["Analytics & Logging\n· Resolution rate (target: 70%)\n· Escalation rate\n· Intent distribution\n· Avg turns to resolve"]
+    end
+
+    ZD_IN -->|"ticket payload"| INTAKE
+    INTAKE --> CLASSIFY
+    CLASSIFY --> SENTIMENT
+    SENTIMENT --> ROUTER
+
+    ROUTER --> ORDER_FLOW
+    ROUTER --> PRODUCT_FLOW
+    ROUTER --> RETURN_FLOW
+    ROUTER --> HUMAN_FLOW
+
+    ORDER_FLOW <-->|"lookup_order"| ORDERS
+    PRODUCT_FLOW <-->|"search_products"| PRODUCTS
+    PRODUCT_FLOW <-->|"FAQ lookup"| FAQ
+    RETURN_FLOW <-->|"verify + create_return"| ORDERS
+
+    INTAKE <-->|"read/write session"| CONV_MEM
+
+    ORDER_FLOW & PRODUCT_FLOW & RETURN_FLOW --> RESPGEN
+    RESPGEN -->|"resolved"| ZD_OUT_CLOSE
+    HUMAN_FLOW -->|"context summary + priority"| ZD_OUT_ESC
+    RESPGEN --> ANALYTICS
 ```
 
 2. **Tool Design:**
@@ -510,16 +567,57 @@ Design a document processing pipeline for financial services:
 
 **Pipeline Architecture:**
 
-```
-┌────────┐   ┌───────────┐   ┌────────────┐   ┌────────────┐
-│ Ingest │──▶│ Classify  │──▶│  Extract   │──▶│  Validate  │
-└────────┘   └───────────┘   └────────────┘   └────────────┘
-                                                     │
-                                     ┌───────────────┼───────────────┐
-                                     ▼               ▼               ▼
-                              ┌──────────┐   ┌──────────┐   ┌──────────┐
-                              │ Auto-pass│   │  Review  │   │  Reject  │
-                              └──────────┘   └──────────┘   └──────────┘
+```mermaid
+flowchart TD
+    subgraph COMPLIANCE["Compliance Boundary (HIPAA / SOC2)"]
+        direction TB
+
+        subgraph INGEST["Ingestion"]
+            SRC["Document Sources\nPDFs · Scanned docs · Handwritten notes\nInvoices · Contracts · Forms"]
+            PREPROC["Pre-processing\n· OCR for scanned / handwritten\n· PDF text extraction\n· Format normalization\n· AES-256 encryption at rest\n· PHI detection & masking"]
+            AUDIT[("Audit Log\n· All access & changes\n· Timestamp + user_id\n· SOC2 required")]
+        end
+
+        subgraph CLASSIFY_STAGE["Classification"]
+            CLASSIFIER["Document Classifier\n· Model: LayoutLMv3 / fine-tuned ViT\n· Types: Invoice | Contract | Receipt\n         Form | ID | Other\n· Confidence threshold: 0.95 auto-route"]
+        end
+
+        subgraph EXTRACT_STAGE["Extraction (Tiered)"]
+            TIER1["Tier 1: Document AI\nAWS Textract / Azure Form Recognizer\n· Structured forms (fast + cheap)\n· Returns per-field confidence scores"]
+            TIER2["Tier 2: Vision LLM\nGPT-4V / Claude Vision\n· Complex / unstructured layouts\n· Better semantic understanding\n· Higher cost, fallback only"]
+            CROSSVAL["Cross-Validation\n· Combine Tier 1 + Tier 2 outputs\n· Resolve conflicts by confidence\n· Aggregate field-level confidence"]
+        end
+
+        subgraph VALIDATE_STAGE["Validation"]
+            RULES["Validation Rules Engine\nInvoice: total > 0, valid date,\n  tax ID format, line items sum\nContract: ≥2 parties, valid date,\n  signature present"]
+            CONF_GATE{{"Confidence\n& Rules\nGate"}}
+        end
+
+        subgraph OUTCOMES["Outcomes"]
+            AUTO["Auto-pass\n· confidence ≥ 0.99\n· all rules pass\n→ write to Structured Store"]
+            REVIEW["Human Review Queue\n· 0.85 ≤ confidence < 0.99\n· or rule warnings\nReviewer sees:\n· original doc image\n· fields + confidence scores\n· validation errors highlighted\n· LLM-suggested corrections\n· one-click approve or field edit"]
+            REJECT["Reject / Dead Letter\n· confidence < 0.85\n· critical rule failures\n→ retry queue or manual triage"]
+        end
+
+        STRUCTURED[("Structured Data Store\nExtracted fields\nper doc type schema")]
+        DLQ[("Dead Letter Queue\nFailed docs\nretry + alert")]
+    end
+
+    SRC -->|"raw documents\nTLS 1.3 in transit"| PREPROC
+    PREPROC -->|"normalized + encrypted"| CLASSIFIER
+    PREPROC --> AUDIT
+    CLASSIFIER -->|"doc type + confidence"| TIER1
+    CLASSIFIER -->|"low conf or complex layout"| TIER2
+    TIER1 & TIER2 --> CROSSVAL
+    CROSSVAL -->|"fields + confidence"| RULES
+    RULES --> CONF_GATE
+    CONF_GATE -->|"high confidence + rules pass"| AUTO
+    CONF_GATE -->|"medium confidence or warnings"| REVIEW
+    CONF_GATE -->|"low confidence or rule failure"| REJECT
+    AUTO --> STRUCTURED
+    REVIEW -->|"approved corrections"| STRUCTURED
+    REVIEW --> AUDIT
+    REJECT --> DLQ
 ```
 
 **Key Components:**
@@ -606,28 +704,93 @@ Design a content moderation system for a social platform:
 
 **Architecture Pattern: Multi-Stage Cascade**
 
-```
-         ┌───────────────────────────────────────────┐
-         │              Fast Filters                 │
-         │   (regex, blocklist, hash matching)       │
-         └─────────────────┬─────────────────────────┘
-                           │ Pass 95%
-                           ▼
-         ┌───────────────────────────────────────────┐
-         │            ML Classifiers                 │
-         │   (text: BERT, image: CLIP, video: X3D)   │
-         └─────────────────┬─────────────────────────┘
-                           │ Uncertain 5%
-                           ▼
-         ┌───────────────────────────────────────────┐
-         │            LLM Analysis                   │
-         │   (context-aware, nuanced decisions)      │
-         └─────────────────┬─────────────────────────┘
-                           │ Still uncertain 0.5%
-                           ▼
-         ┌───────────────────────────────────────────┐
-         │            Human Review                   │
-         └───────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph INGEST["Content Ingestion"]
+        POST["Incoming Post\ntext · image · video"]
+        SPLIT["Content Type Router"]
+        TEXT_IN["Text Pipeline"]
+        IMAGE_IN["Image Pipeline"]
+        VIDEO_IN["Video Pipeline"]
+        POST --> SPLIT
+        SPLIT --> TEXT_IN & IMAGE_IN & VIDEO_IN
+    end
+
+    subgraph STAGE1["Stage 1: Fast Filters (20ms)"]
+        FF["Fast Filters\n· Regex pattern matching\n· PhotoDNA hash matching (CSAM)\n· Blocklist lookup (known bad actors)\n· Exact-match spam signatures"]
+        DEC1{{"Decision"}}
+        FF --> DEC1
+    end
+
+    subgraph STAGE2["Stage 2: ML Classifiers (80ms)"]
+        ML_TEXT["Text Classifier\nBERT (multilingual, 10 langs)\nhate speech · spam · threats"]
+        ML_IMAGE["Image Classifier\nCLIP\nadult · violence · symbols"]
+        ML_VIDEO["Video Classifier\nX3D (temporal)\nscene-level violence · adult"]
+        MERGE2["Merge Signals\n· Combine scores per category\n· Apply thresholds:\n  hate_speech: block≥0.95, limit≥0.80\n  adult_content: block≥0.98, limit≥0.90\n· Batched GPU inference"]
+        DEC2{{"Decision"}}
+        ML_TEXT & ML_IMAGE & ML_VIDEO --> MERGE2 --> DEC2
+    end
+
+    subgraph STAGE3["Stage 3: LLM Analysis (400ms async — ~5% of content)"]
+        LLM_MOD["LLM Moderator\n· Context-aware nuanced decisions\n· Handles satire, cultural context,\n  edge cases across 10 languages\n· Returns: decision + reasoning"]
+        DEC3{{"Decision"}}
+        LLM_MOD --> DEC3
+    end
+
+    subgraph STAGE4["Stage 4: Human Review Queue (~0.5% of content)"]
+        HUMAN["Human Reviewer\n· Reviews flagged content\n· Sees LLM reasoning + confidence\n· Logs decision with rationale"]
+        DEC4{{"Decision"}}
+        HUMAN --> DEC4
+    end
+
+    subgraph OUTCOMES["Outcomes"]
+        BLOCK["BLOCK\nHigh-confidence violation\nRemove immediately"]
+        LIMIT["LIMIT\nReduce distribution\nDe-amplify in feed"]
+        ALLOW["ALLOW\nHigh-confidence safe\nPost goes live"]
+        REVIEW_Q["Human Review Queue"]
+    end
+
+    subgraph APPEAL["Appeal Workflow"]
+        APPEAL_IN["User Submits Appeal"]
+        BLIND_REV["Blind Review\n(different reviewer)"]
+        APPEAL_DEC{{"Overturn?"}}
+        RESTORE["Restore Content"]
+        UPHOLD["Uphold Decision"]
+        TRAIN_DATA[("Training Data\nNegative example added")]
+        APPEAL_IN --> BLIND_REV --> APPEAL_DEC
+        APPEAL_DEC -->|"yes"| RESTORE
+        APPEAL_DEC -->|"no"| UPHOLD
+        RESTORE -->|"overturn logged"| TRAIN_DATA
+    end
+
+    subgraph OPS["Ops & Retraining"]
+        METRICS["Metrics Dashboard\n· False positive rate\n· Appeal overturn rate\n· Latency per stage\n· Coverage per violation type"]
+        RETRAIN["Periodic Model Retraining\n· Human review corrections\n· Overturned appeal decisions\n· New violation patterns"]
+        TRAIN_DATA --> RETRAIN
+    end
+
+    TEXT_IN & IMAGE_IN & VIDEO_IN --> FF
+
+    DEC1 -->|"known violation"| BLOCK
+    DEC1 -->|"known safe (95%)"| ALLOW
+    DEC1 -->|"uncertain"| ML_TEXT & ML_IMAGE & ML_VIDEO
+
+    DEC2 -->|"block score ≥ threshold"| BLOCK
+    DEC2 -->|"limit score ≥ threshold"| LIMIT
+    DEC2 -->|"safe score ≥ threshold"| ALLOW
+    DEC2 -->|"uncertain (5%)"| LLM_MOD
+
+    DEC3 -->|"block"| BLOCK
+    DEC3 -->|"limit"| LIMIT
+    DEC3 -->|"allow"| ALLOW
+    DEC3 -->|"still uncertain (0.5%)"| REVIEW_Q
+
+    REVIEW_Q --> HUMAN
+    DEC4 -->|"violation"| BLOCK
+    DEC4 -->|"safe"| ALLOW
+
+    BLOCK --> APPEAL_IN
+    HUMAN & DEC3 & DEC4 --> METRICS
 ```
 
 **Key Design Decisions:**
@@ -704,34 +867,56 @@ Design a multi-tenant AI platform (AI-as-a-Service):
 
 **Tenant Isolation Architecture:**
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         API Gateway                              │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │   Auth → Tenant Context → Rate Limit → Route             │   │
-│  └──────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    Tenant-Aware Service Layer                    │
-│                                                                  │
-│  All operations scoped to tenant_id from context                │
-│  - Retrieval filters by tenant                                  │
-│  - Cache keys prefixed by tenant                                │
-│  - Audit logs include tenant                                    │
-└─────────────────────────────────────────────────────────────────┘
-                               │
-           ┌───────────────────┼───────────────────┐
-           ▼                   ▼                   ▼
-┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
-│  Shared Vector  │ │  Shared LLM     │ │  Shared Object  │
-│  DB (filtered)  │ │  (no tenant     │ │  Storage        │
-│                 │ │   data in prompt│ │  (tenant paths) │
-│  tenant_id in   │ │   history)      │ │                 │
-│  all metadata   │ │                 │ │  s3://bucket/   │
-└─────────────────┘ └─────────────────┘ │  {tenant_id}/   │
-                                        └─────────────────┘
+```mermaid
+flowchart TD
+    subgraph SOC2["SOC2 Compliance Boundary"]
+        direction TB
+
+        subgraph API_LAYER["API Gateway Layer"]
+            CLIENT["Tenant Client\nSDK / REST / Web UI"]
+            GW["API Gateway\n· TLS termination\n· JWT validation\n· Extract tenant_id from token"]
+            AUTH["Auth Service\n· Verify JWT\n· Check tenant active\n· MFA enforcement"]
+            TENANT_CFG[("Tenant Config Store\n· tier: starter|pro|enterprise\n· feature flags\n· rate limit quotas\n· custom model config")]
+            RATE["Rate Limiter\n· Per-tenant token budget\n· Redis counter:\n  usage:{tenant_id}:{today}\n· 429 on quota exceeded"]
+            ROUTER_GW["Request Router\n· Route to service\n· Inject TenantContext\n  (tenant_id, user_id, tier)"]
+            AUDIT_LOG[("Audit Log DB\n· Every request logged\n· tenant_id + user_id\n· operation + timestamp\n· SOC2 required")]
+
+            CLIENT -->|"Bearer JWT"| GW
+            GW --> AUTH
+            AUTH -->|"tier lookup"| TENANT_CFG
+            TENANT_CFG --> RATE
+            RATE -->|"TenantContext injected"| ROUTER_GW
+            GW & ROUTER_GW --> AUDIT_LOG
+        end
+
+        subgraph SERVICE_LAYER["Tenant-Aware Service Layer"]
+            SVC["Core AI Service\n· All ops scoped to tenant_id\n· Cache keys: {tenant_id}:*\n· Retrieval filters by tenant\n· No cross-tenant data leakage"]
+            REDIS_CACHE[("Redis Cache\n· Per-tenant prefix\n· Permissions, embeddings,\n  query results\n· Eviction by tenant tier")]
+        end
+
+        subgraph INFRA["Shared Infrastructure (Isolated by tenant_id)"]
+            VDB[("Vector Database\nShared cluster\n· tenant_id in ALL metadata\n· Query filter: tenant_id=X\n· No cross-tenant results")]
+            LLM["Shared LLM Pool\nGPT-4o / Claude\n· No tenant data in\n  prompt history\n· Stateless per request\n· No conversation leakage"]
+            OBJ[("Object Storage\nS3 / GCS\n· Path: s3://bucket/{tenant_id}/\n· Bucket policy enforced\n· AES-256 encryption at rest")]
+        end
+
+        subgraph BILLING_OPS["Billing & Operations"]
+            USAGE_SVC["Usage Tracking Service\n· operation: embed|retrieve|generate\n· model, tokens_in, tokens_out\n· latency_ms, cost_cents"]
+            TSDB[("Time-Series DB\nper-tenant usage events\ntenant_id + timestamp")]
+            BILLING["Billing Service\n· Aggregate monthly usage\n· Apply tier pricing\n· Generate invoices\n· Overage alerts"]
+            DASH["Usage Dashboard\n· Real-time token consumption\n· Cost by operation type\n· Latency percentiles\n· Quota utilization"]
+        end
+    end
+
+    ROUTER_GW --> SVC
+    SVC <-->|"cached reads/writes"| REDIS_CACHE
+    SVC <-->|"tenant_id filtered query"| VDB
+    SVC <-->|"stateless request"| LLM
+    SVC <-->|"tenant-scoped path"| OBJ
+    SVC -->|"usage event"| USAGE_SVC
+    USAGE_SVC --> TSDB
+    TSDB --> BILLING & DASH
+    REDIS_CACHE -->|"cache miss"| VDB
 ```
 
 **Critical Isolation Points:**
@@ -818,27 +1003,58 @@ At 100ms latency, need:
 
 **Architecture:**
 
-```
-┌────────────────────────────────────────────────────────────┐
-│                         CDN/Edge                            │
-│              (Cache popular queries: ~30% hit)              │
-└─────────────────────────────┬──────────────────────────────┘
-                              │
-┌─────────────────────────────▼──────────────────────────────┐
-│                      Query Service                          │
-│  1. Embed query (cached embeddings for common queries)      │
-│  2. Retrieve candidates (ANN search)                        │
-│  3. Apply filters (post-filter or hybrid)                   │
-│  4. Personalize ranking                                     │
-│  5. Return results                                          │
-└─────────────────────────────┬──────────────────────────────┘
-                              │
-┌─────────────────────────────▼──────────────────────────────┐
-│                    Vector Database Cluster                  │
-│  - Sharded by category (reduce search space)                │
-│  - HNSW index with ef_search tuned for speed                │
-│  - Metadata filtering with roaring bitmaps                  │
-└────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph CLIENT["Client Layer"]
+        USER["User Browser / App\n100M queries/day\nPeak: 5,000–10,000 QPS"]
+    end
+
+    subgraph EDGE["Edge Layer"]
+        CDN["CDN / Edge Cache\n· ~30% cache hit rate\n· Cached: popular query results\n· TTL tuned per category\n· 5ms check"]
+    end
+
+    subgraph QUERY_SVC["Query Service (stateless, horizontally scaled)"]
+        EMBED_SVC["Embedding Service\n· Small bi-encoder model\n· Common query cache (Redis)\n  10ms cached / 30ms compute\n· Pre-computed for top-10k queries"]
+        QUERY_TYPE{{"Query Type\nDetection"}}
+        SPARSE_W["Keyword-heavy query\ne.g. 'nike air max 90 size 10'\nsparse_weight=0.7, dense=0.3"]
+        DENSE_W["Semantic query\ne.g. 'comfortable shoes for flat feet'\ndense_weight=0.7, sparse=0.3"]
+        FILTER_ENGINE["Filter Engine\n· Price range\n· Category\n· Brand\n· Ratings\n· In-stock flag\n· Roaring bitmap indexes\n· 10ms"]
+        RRF["Reciprocal Rank Fusion\n· Merges dense + sparse results\n· Dynamic weight by query type\n· top-100 → merged → top-20\n· 10ms"]
+        PERS_SVC["Personalization Service\n· User history-based boost\n· Category affinity scores\n· Brand preferences\n· Recent views / purchases\n· 10ms"]
+    end
+
+    subgraph RETRIEVAL["Retrieval Layer"]
+        VDB[("Vector DB Cluster\nDense / ANN Search\n· 50M product embeddings\n· Sharded by category\n· HNSW index, ef_search tuned\n· 30ms\n· top-100 candidates")]
+        ES[("Elasticsearch\nSparse / Keyword Search\n· BM25 + product attributes\n· Filters via inverted index\n· 30ms\n· top-100 candidates")]
+        USER_PROFILE[("User Profile Store\n· Purchase history\n· Click / view events\n· Category affinities\n· Brand preferences")]
+        EMBED_CACHE[("Embedding Cache\n· Redis\n· Pre-computed embeddings\n· Popular product vectors")]
+    end
+
+    subgraph UPDATES["Real-Time Update Pipeline"]
+        CATALOG[("Product Catalog DB\nSource of truth\n50M products")]
+        KAFKA["Kafka Event Stream\n· price_changed\n· inventory_updated\n· product_added\n· description_changed"]
+        META_CONSUMER["Metadata Consumer\n· Price / inventory changes\n· Updates vector DB metadata only\n· No re-embed needed\n· Reflects within seconds"]
+        REINDEX_JOB["Async Reindex Job\n· Description / image changes\n· Full re-embed required\n· Blue/green index swap\n· Zero-downtime cutover"]
+        INVENTORY["Inventory Service\n· Real-time stock levels\n· Reserve on order\n· Feed to filter engine"]
+    end
+
+    USER -->|"search query"| CDN
+    CDN -->|"cache miss"| EMBED_SVC
+    EMBED_SVC --> QUERY_TYPE
+    QUERY_TYPE --> SPARSE_W & DENSE_W
+    SPARSE_W & DENSE_W -->|"parallel retrieval"| VDB & ES
+    EMBED_SVC <-->|"cached vector lookup"| EMBED_CACHE
+    VDB & ES -->|"top-100 each"| RRF
+    RRF --> FILTER_ENGINE
+    FILTER_ENGINE -->|"filtered candidates"| PERS_SVC
+    PERS_SVC <-->|"user history"| USER_PROFILE
+    PERS_SVC -->|"ranked results"| CDN
+
+    CATALOG --> KAFKA
+    KAFKA --> META_CONSUMER & REINDEX_JOB
+    META_CONSUMER -->|"metadata patch"| VDB
+    REINDEX_JOB -->|"new index swap"| VDB
+    INVENTORY -->|"in-stock filter"| FILTER_ENGINE
 ```
 
 **Latency Budget:**
